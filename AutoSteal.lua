@@ -1,22 +1,17 @@
---[[
-  UI "Set Position" / "Fly to Base" para o personagem local
-  - "Set Position": salva o CFrame atual do HumanoidRootPart
-  - "Fly to Base": move (voa) suavemente até a posição salva (sem voltar)
-  - Sem resets/retornos automáticos; a posição fica salva até você mudar
---]]
+-- Fly to Base UI - versão corrigida (não mata ao voar)
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 
--- Util: obtém o HRP com segurança
+-- função utilitária para pegar HRP e Humanoid
 local function getHRP()
 	local char = player.Character or player.CharacterAdded:Wait()
 	return char:WaitForChild("HumanoidRootPart"), char:WaitForChild("Humanoid")
 end
 
--- Cria UI básica programaticamente
+-- Criar UI
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "FlyBaseUI"
 screenGui.ResetOnSpawn = false
@@ -24,7 +19,6 @@ screenGui.IgnoreGuiInset = true
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local container = Instance.new("Frame")
-container.Name = "Container"
 container.AnchorPoint = Vector2.new(1, 1)
 container.Position = UDim2.fromScale(0.98, 0.95)
 container.Size = UDim2.fromOffset(250, 90)
@@ -42,7 +36,6 @@ local function makeButton(text)
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.fromOffset(120, 44)
 	btn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-	btn.AutoButtonColor = true
 	btn.Text = text
 	btn.TextColor3 = Color3.fromRGB(240, 240, 255)
 	btn.Font = Enum.Font.GothamSemibold
@@ -58,11 +51,6 @@ local function makeButton(text)
 	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = btn
 
-	local padding = Instance.new("UIPadding")
-	padding.PaddingLeft = UDim.new(0, 10)
-	padding.PaddingRight = UDim.new(0, 10)
-	padding.Parent = btn
-
 	return btn
 end
 
@@ -76,9 +64,8 @@ flyBtn.Parent = container
 local savedCFrame: CFrame? = nil
 local isFlying = false
 
--- Feedback simples
+-- Notificação simples
 local function notify(msg)
-	if not game:GetService("StarterGui"):FindFirstChild("SetCore") then return end
 	pcall(function()
 		game.StarterGui:SetCore("SendNotification", {
 			Title = "FlyBase",
@@ -88,7 +75,7 @@ local function notify(msg)
 	end)
 end
 
--- Lógica "Set Position"
+-- Botão "Set Position"
 setBtn.Activated:Connect(function()
 	local hrp = getHRP()
 	if not hrp then
@@ -99,11 +86,11 @@ setBtn.Activated:Connect(function()
 	notify("Posição salva!")
 end)
 
--- Lógica "Fly to Base"
+-- Botão "Fly to Base"
 flyBtn.Activated:Connect(function()
 	if isFlying then return end
 	if not savedCFrame then
-		notify("Nenhuma posição salva. Use 'Set Position' primeiro.")
+		notify("Nenhuma posição salva.")
 		return
 	end
 
@@ -115,54 +102,25 @@ flyBtn.Activated:Connect(function()
 
 	isFlying = true
 
-	-- Prepara voo: reduz interferência da física
-	local originalPlatform = humanoid.PlatformStand
-	local originalAutoRotate = humanoid.AutoRotate
+	-- zerar velocidade (não deixa cair)
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
 
-	-- Velocidade zero
-	if hrp:IsA("BasePart") then
-		hrp.AssemblyLinearVelocity = Vector3.zero
-		hrp.AssemblyAngularVelocity = Vector3.zero
-	end
-
-	-- Desativa rotações e dá "hover"
-	humanoid.AutoRotate = false
-	humanoid.PlatformStand = true
-
-	-- Duração baseada na distância (suave e previsível)
+	-- calcular tempo de voo
 	local distance = (hrp.Position - savedCFrame.Position).Magnitude
-	local duration = math.clamp(distance / 60, 0.4, 3.0) -- 60 studs/s, min 0.4s, max 3s
+	local duration = math.clamp(distance / 60, 0.4, 3.0)
 
-	-- Tween direto do CFrame do HRP
 	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
 	local tween = TweenService:Create(hrp, tweenInfo, { CFrame = savedCFrame })
-
-	-- Segurança: bloquear input de movimento (opcional)
-	local ctxAction = game:GetService("ContextActionService")
-	local actionName = "BlockMovementForFly"
-	ctxAction:BindAction(actionName, function() return Enum.ContextActionResult.Sink end,
-		false, Enum.PlayerActions.CharacterForward, Enum.PlayerActions.CharacterBackward,
-		Enum.PlayerActions.CharacterLeft, Enum.PlayerActions.CharacterRight,
-		Enum.PlayerActions.CharacterJump)
 
 	tween:Play()
 	tween.Completed:Wait()
 
-	-- Restaura estados (sem voltar para a posição anterior!)
-	ctxAction:UnbindAction(actionName)
-	humanoid.PlatformStand = originalPlatform
-	humanoid.AutoRotate = originalAutoRotate
-
 	isFlying = false
-	notify("Chegou à base!")
+	notify("Chegou na base!")
 end)
 
--- Mantém a posição salva mesmo após respawn (sem reset)
-player.CharacterAdded:Connect(function(char)
-	-- Apenas garante que a UI continue viva e sem resetar a posição salva
+-- Garantir UI depois de respawn
+player.CharacterAdded:Connect(function()
 	screenGui.Parent = player:WaitForChild("PlayerGui")
 end)
-
--- DICA: se quiser que o "Fly to Base" gire o personagem para a mesma orientação salva,
--- já usamos CFrame completo (posição + rotação). Se preferir manter a rotação atual,
--- troque { CFrame = savedCFrame } por { CFrame = CFrame.new(savedCFrame.Position) }.
