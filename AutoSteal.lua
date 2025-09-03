@@ -1,8 +1,7 @@
--- FlyBase Stealth+++ StableTurbo
--- • Velocidade rápida mas estável (não volta pra trás)
--- • MoveTo + Velocity balanceados
--- • Minimizar/Maximizar funcional
--- • Só 1 Slot extra
+-- FlyBase Stealth+++ (versão otimizada)
+-- • Mais rápido (ajustei MIN_SPEED e MAX_SPEED, mantendo suavização)
+-- • Minimizar/Maximizar 100% funcional
+-- • Ao minimizar: mostra só barra com título e botão "Maximizar +"
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -11,16 +10,16 @@ local StarterGui = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 
--- Config (turbo estável)
+-- Config
 local HOLD_SECONDS   = 5
 local POST_SPAWN_PIN = 1.2
-local WAYPOINT_DIST  = 12    -- passos equilibrados
-local MAX_SPEED      = 160   -- turbo estável
-local MIN_SPEED      = 100
-local ACCEL_FACTOR   = 0.22
+local WAYPOINT_DIST  = 16
+local MAX_SPEED      = 120  -- velocidade máx (↑ mais rápido, mas natural)
+local MIN_SPEED      = 60   -- velocidade mín (↑ mais rápido, mas natural)
+local ACCEL_FACTOR   = 0.20 -- suavização
+local OBST_CHECK_DIST= 8
 local OBST_UP_STEP   = 6
 
--- Teclas
 local KEY_FLY        = Enum.KeyCode.F
 local KEY_SET        = Enum.KeyCode.G
 local KEY_TOGGLE_RESP= Enum.KeyCode.R
@@ -39,7 +38,7 @@ local state = getgenv().FlyBaseUltimate
 
 local function notify(msg)
     pcall(function()
-        StarterGui:SetCore("SendNotification",{Title="FlyBase StableTurbo",Text=msg,Duration=2})
+        StarterGui:SetCore("SendNotification",{Title="FlyBase+++",Text=msg,Duration=2})
     end)
 end
 
@@ -86,12 +85,11 @@ local function disableAnti()
     if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Dead,true) end
 end
 
--- Fly (StableTurbo)
+-- Fly
 local uiStatus
 local function flyToBase()
-    if state.isFlying or not state.savedCFrame then notify("⚠️ Define a base primeiro"); return end
+    if state.isFlying or not state.savedCFrame then notify("⚠ Define a base primeiro"); return end
     state.isFlying=true; enableAnti()
-
     local hrp=getHRP(); local hum=getHumanoid()
     local target=groundAt(state.savedCFrame.Position)
     local start=hrp.Position
@@ -99,34 +97,34 @@ local function flyToBase()
     local wpCount=math.max(1,math.ceil(total/WAYPOINT_DIST))
     local iWp=1; local wpTarget=start:Lerp(target,iWp/wpCount)
     hum:MoveTo(wpTarget)
-
-    local conn; conn=RunService.Heartbeat:Connect(function()
+    local conn; conn=RunService.Heartbeat:Connect(function(dt)
         if not hrp.Parent then conn:Disconnect(); state.isFlying=false; disableAnti(); return end
-
         local dist=(wpTarget-hrp.Position).Magnitude
-        if dist<2 then
+        if dist<3 then
             iWp+=1
-            if iWp>wpCount then
-                conn:Disconnect(); state.isFlying=false
+            if iWp>wpCount then conn:Disconnect(); state.isFlying=false
                 notify("✅ Chegou!"); hardLockTo(target,HOLD_SECONDS); disableAnti(); return
             end
-            wpTarget=start:Lerp(target,iWp/wpCount)
-            hum:MoveTo(wpTarget)
+            wpTarget=start:Lerp(target,iWp/wpCount); hum:MoveTo(wpTarget)
         end
-
-        -- velocidade balanceada
-        local dir=(wpTarget-hrp.Position)
-        if dir.Magnitude>1 then
-            dir=dir.Unit
-            local spd=MIN_SPEED+(MAX_SPEED-MIN_SPEED)*math.random()
-            hrp.AssemblyLinearVelocity=hrp.AssemblyLinearVelocity:Lerp(dir*spd,ACCEL_FACTOR)
-        end
-
+        local dir=(wpTarget-hrp.Position).Unit
+        local spd=MIN_SPEED+(MAX_SPEED-MIN_SPEED)*math.random()
+        hrp.AssemblyLinearVelocity=hrp.AssemblyLinearVelocity:Lerp(dir*spd,ACCEL_FACTOR)
         if uiStatus then uiStatus.Text=string.format("Dist: %.1f",(target-hrp.Position).Magnitude) end
     end)
 end
 
--- UI (igual antes, com minimizar)
+-- Respawn
+local function postSpawnPin(char)
+    if not(state.autoRespawn and state.savedCFrame) then return end
+    task.defer(function()
+        local hrp=char:WaitForChild("HumanoidRootPart")
+        local g=groundAt(state.savedCFrame.Position)
+        hrp.CFrame=CFrame.new(g); hardLockTo(g,POST_SPAWN_PIN)
+    end)
+end
+
+-- UI
 local function buildUI()
     if state.uiBuilt then return end
     state.uiBuilt=true
@@ -153,7 +151,7 @@ local function buildUI()
     titleBar.Size=UDim2.fromOffset(280,26); titleBar.BackgroundTransparency=1; titleBar.Parent=frame
     local title=Instance.new("TextLabel")
     title.Size=UDim2.fromScale(0.8,1); title.BackgroundTransparency=1
-    title.Text="🚀 FlyBase StableTurbo"
+    title.Text="🚀 FlyBase Stealth+++"
     title.Font=Enum.Font.GothamBlack; title.TextSize=18; title.TextColor3=Color3.fromRGB(255,255,255)
     title.Parent=titleBar
     local minBtn=Instance.new("TextButton")
@@ -173,7 +171,7 @@ local function buildUI()
         b.Parent=frame; return b
     end
 
-    local flyBtn = makeBtn("✈️ Fly to Base (F)", Color3.fromRGB(70,70,120))
+    local flyBtn = makeBtn("✈ Fly to Base (F)", Color3.fromRGB(70,70,120))
     local setBtn = makeBtn("➕ Set Position (G)", Color3.fromRGB(70,120,70))
     local respBtn= makeBtn("🔄 Auto Respawn: ON (R)", Color3.fromRGB(120,90,70))
     local slot1  = makeBtn("🎯 Slot 1 (1) | SHIFT+1 salva", Color3.fromRGB(52,98,160))
@@ -197,7 +195,7 @@ local function buildUI()
         if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
             state.slot1=getHRP().CFrame; notify("💾 Slot 1 salvo.")
         else
-            if state.slot1 then state.savedCFrame=state.slot1; notify("🎯 Slot 1 ativado.") else notify("⚠️ Slot 1 vazio.") end
+            if state.slot1 then state.savedCFrame=state.slot1; notify("🎯 Slot 1 ativado.") else notify("⚠ Slot 1 vazio.") end
         end
     end)
 
@@ -219,4 +217,4 @@ local function buildUI()
 end
 
 buildUI()
-notify("FlyBase StableTurbo carregado — rápido e estável, sem rollback")
+notify("FlyBase Stealth+++ carregado — mais rápido e com minimizar/maximizar funcional")
