@@ -1,37 +1,25 @@
--- FlyBase Cinematic
--- Voo com câmera, efeitos visuais e HUD
+-- FlyBase UI Estilizada
+-- Apenas 2 botões: Set / Fly, mas com interface bonita
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
-local camera = workspace.CurrentCamera
 
 -- estado global
-getgenv().FlyCinematic = getgenv().FlyCinematic or {
+getgenv().FlyBaseUI = getgenv().FlyBaseUI or {
     savedCFrame = nil,
     isFlying = false,
     uiBuilt = false
 }
-local state = getgenv().FlyCinematic
+local state = getgenv().FlyBaseUI
 
--- utils
+-- util
 local function getHRP()
     local char = player.Character or player.CharacterAdded:Wait()
-    return char:WaitForChild("HumanoidRootPart"), char:WaitForChild("Humanoid")
+    return char:WaitForChild("HumanoidRootPart")
 end
 
-local function notify(msg)
-    pcall(function()
-        game.StarterGui:SetCore("SendNotification", {
-            Title = "FlyBase",
-            Text = msg,
-            Duration = 3
-        })
-    end)
-end
-
--- cria UI
+-- interface
 local function buildUI()
     if state.uiBuilt then return end
     state.uiBuilt = true
@@ -42,89 +30,87 @@ local function buildUI()
     gui.Parent = player:WaitForChild("PlayerGui")
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.fromOffset(220, 180)
-    frame.Position = UDim2.fromScale(0.8, 0.7)
-    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+    frame.Size = UDim2.fromOffset(260, 220)
+    frame.Position = UDim2.fromScale(0.75, 0.65)
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
     frame.Parent = gui
-    Instance.new("UICorner", frame)
+
+    local corner = Instance.new("UICorner", frame)
+    corner.CornerRadius = UDim.new(0, 14)
+
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Thickness = 2
+    stroke.Color = Color3.fromRGB(100, 140, 255)
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 40)
+    title.BackgroundTransparency = 1
+    title.Text = "🚀 FlyBase"
+    title.Font = Enum.Font.GothamBlack
+    title.TextSize = 20
+    title.TextColor3 = Color3.fromRGB(255,255,255)
+    title.Parent = frame
 
     local layout = Instance.new("UIListLayout", frame)
     layout.Padding = UDim.new(0, 12)
+    layout.FillDirection = Enum.FillDirection.Vertical
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout.VerticalAlignment = Enum.VerticalAlignment.Center
 
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.fromOffset(200, 24)
-    title.BackgroundTransparency = 1
-    title.Text = "🚀 FlyBase Cinematic"
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 16
-    title.TextColor3 = Color3.new(1,1,1)
-    title.Parent = frame
-
-    local function makeBtn(txt)
+    local function makeBtn(txt, baseColor, hoverColor)
         local b = Instance.new("TextButton")
-        b.Size = UDim2.fromOffset(160, 40)
+        b.Size = UDim2.fromOffset(200, 50)
         b.Text = txt
         b.Font = Enum.Font.GothamBold
-        b.TextSize = 16
-        b.TextColor3 = Color3.new(1,1,1)
-        b.BackgroundColor3 = Color3.fromRGB(50,50,70)
+        b.TextSize = 18
+        b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        b.BackgroundColor3 = baseColor
         Instance.new("UICorner", b)
+
+        local s = Instance.new("UIStroke")
+        s.Thickness = 1.6
+        s.Color = Color3.fromRGB(255,255,255)
+        s.Parent = b
+
+        b.MouseEnter:Connect(function()
+            b.BackgroundColor3 = hoverColor
+        end)
+        b.MouseLeave:Connect(function()
+            b.BackgroundColor3 = baseColor
+        end)
+
         b.Parent = frame
         return b
     end
 
-    local setBtn = makeBtn("➕ Set Position")
-    local flyBtn = makeBtn("✈️ Fly to Base")
+    local setBtn = makeBtn("➕ Set Position", Color3.fromRGB(70,120,70), Color3.fromRGB(90,160,90))
+    local flyBtn = makeBtn("✈️ Fly to Base", Color3.fromRGB(70,70,120), Color3.fromRGB(100,100,160))
 
-    -- HUD central
-    local hud = Instance.new("TextLabel")
-    hud.Size = UDim2.fromScale(1, 0.1)
-    hud.Position = UDim2.fromScale(0, 0.45)
-    hud.BackgroundTransparency = 1
-    hud.Text = ""
-    hud.Font = Enum.Font.GothamBlack
-    hud.TextSize = 28
-    hud.TextColor3 = Color3.fromRGB(200, 240, 255)
-    hud.Parent = gui
+    -- HUD de status
+    local status = Instance.new("TextLabel")
+    status.Size = UDim2.fromOffset(200, 30)
+    status.BackgroundTransparency = 1
+    status.Text = "Base salva: nenhuma"
+    status.Font = Enum.Font.Gotham
+    status.TextSize = 14
+    status.TextColor3 = Color3.fromRGB(200,220,255)
+    status.Parent = frame
 
-    -- SET
+    -- lógica Set
     setBtn.MouseButton1Click:Connect(function()
         local hrp = getHRP()
         state.savedCFrame = hrp.CFrame
-        notify("📍 Posição salva!")
+        status.Text = "Base salva ✔"
     end)
 
-    -- FLY
+    -- lógica Fly
     flyBtn.MouseButton1Click:Connect(function()
-        if state.isFlying or not state.savedCFrame then
-            notify("⚠️ Nenhuma posição salva.")
-            return
-        end
+        if state.isFlying or not state.savedCFrame then return end
         state.isFlying = true
 
-        local hrp, hum = getHRP()
-        local startPos = hrp.Position
+        local hrp = getHRP()
         local target = state.savedCFrame.Position
 
-        local distance = (startPos - target).Magnitude
-        local duration = math.clamp(distance/60, 0.5, 6)
-
-        local startTime = tick()
-        local startFOV = camera.FieldOfView
-        hud.Text = "✈️ VOANDO PARA BASE..."
-
-        -- partículas de rastro
-        local attachment = Instance.new("Attachment", hrp)
-        local trail = Instance.new("Trail")
-        trail.Attachment0 = attachment
-        trail.Attachment1 = attachment
-        trail.Color = ColorSequence.new(Color3.fromRGB(90,120,255), Color3.fromRGB(200,220,255))
-        trail.Lifetime = 0.3
-        trail.Parent = hrp
-
-        -- loop de voo
         local conn
         conn = RunService.RenderStepped:Connect(function()
             if not hrp or not hrp.Parent then
@@ -132,37 +118,34 @@ local function buildUI()
                 state.isFlying = false
                 return
             end
-            local elapsed = tick() - startTime
-            local alpha = math.clamp(elapsed/duration,0,1)
 
-            local eased = 0.5 - 0.5*math.cos(math.pi*alpha)
-            local newPos = startPos:Lerp(target, eased)
-            hrp.CFrame = CFrame.new(newPos, target)
+            local pos = hrp.Position
+            local dir = (target - pos)
+            local dist = dir.Magnitude
 
-            -- câmera acompanha
-            camera.CameraType = Enum.CameraType.Scriptable
-            camera.CFrame = hrp.CFrame * CFrame.new(0, 5, -15)
-
-            -- efeito de velocidade (FOV dinâmico)
-            camera.FieldOfView = startFOV + (20 * math.sin(alpha*math.pi))
-
-            if alpha >= 1 then
+            if dist < 2 then
+                hrp.CFrame = CFrame.new(target)
                 conn:Disconnect()
                 state.isFlying = false
-                camera.CameraType = Enum.CameraType.Custom
-                camera.FieldOfView = startFOV
-                hud.Text = ""
-                trail:Destroy()
-                notify("✅ Chegou ao destino!")
+                status.Text = "Chegou ao destino!"
+            else
+                hrp.CFrame = CFrame.new(pos + dir.Unit * math.min(3, dist), target)
+                status.Text = string.format("Distância: %.1f", dist)
             end
         end)
     end)
 
-    -- reaplicar UI
+    -- borda animada
+    RunService.RenderStepped:Connect(function()
+        local t = tick()
+        stroke.Color = Color3.fromHSV((t%5)/5,0.6,1)
+    end)
+
+    -- reatachar GUI no reset
     player.CharacterAdded:Connect(function()
         gui.Parent = player:WaitForChild("PlayerGui")
     end)
 end
 
--- inicializa
 buildUI()
+
