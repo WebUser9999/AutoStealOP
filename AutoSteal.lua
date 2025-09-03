@@ -1,5 +1,5 @@
 -- FlyBase Ultimate
--- Interface + Fly inteligente + Respawn opcional + Reset Cinematic
+-- Interface + Fly inteligente + Respawn opcional + Fixação 7s no destino
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -148,6 +148,19 @@ local function buildUI()
                 conn:Disconnect()
                 state.isFlying = false
                 status.Text = "✅ Chegou ao destino!"
+
+                -- fixa no destino por 7 segundos
+                hrp.CFrame = CFrame.new(target)
+                local anchor = Instance.new("BodyPosition")
+                anchor.Position = target
+                anchor.MaxForce = Vector3.new(1e5,1e5,1e5)
+                anchor.Parent = hrp
+
+                task.delay(7, function()
+                    if anchor and anchor.Parent then
+                        anchor:Destroy()
+                    end
+                end)
             end
         end)
     end)
@@ -164,7 +177,7 @@ local function buildUI()
         stroke.Color = Color3.fromHSV((t%6)/6, 0.6, 1)
     end)
 
-    -- Respawn handler (igual Cinematic, mas opcional)
+    -- Respawn handler
     player.CharacterAdded:Connect(function(char)
         gui.Parent = player:WaitForChild("PlayerGui")
         if state.autoRespawn and state.savedCFrame then
