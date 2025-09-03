@@ -1,6 +1,6 @@
--- FlyBase Ultimate (server-replicated fly)
--- Usa AssemblyLinearVelocity em vez de só mudar CFrame
--- Mantém UI + Auto Respawn + Fixação no chão + Anti-reset no voo
+-- FlyBase Ultimate (server replicated fly)
+-- Move de verdade com AssemblyLinearVelocity (replicado pro servidor)
+-- Mantém UI e pós-respawn
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -11,8 +11,9 @@ local player = Players.LocalPlayer
 local HOLD_SECONDS = 7
 local POST_SPAWN_PIN = 1.2
 local DRIFT_EPS = 0.35
-local MAX_SPEED = 100 -- velocidade máxima permitida
-local ACCEL = 40      -- aceleração (quanto maior, mais rápido pega velocidade)
+
+local MAX_SPEED = 80   -- velocidade máxima
+local ACCEL = 20       -- aceleração
 
 getgenv().FlyBaseUltimate = getgenv().FlyBaseUltimate or {
     savedCFrame = nil,
@@ -26,7 +27,7 @@ local function getChar() return player.Character or player.CharacterAdded:Wait()
 local function getHRP(char) char = char or getChar(); return char:WaitForChild("HumanoidRootPart") end
 local function notify(msg) pcall(function() StarterGui:SetCore("SendNotification",{Title="FlyBase",Text=msg,Duration=2}) end) end
 
--- posição no chão abaixo do ponto alvo
+-- pega posição no chão
 local function getGroundPosition(pos: Vector3)
     local rayParams = RaycastParams.new()
     rayParams.FilterDescendantsInstances = {player.Character}
@@ -39,7 +40,7 @@ local function getGroundPosition(pos: Vector3)
     end
 end
 
--- fixa no chão após voo
+-- lock pós-voo
 local function hardLockTo(targetPos: Vector3, seconds: number)
     local hrp = getHRP()
     if not hrp or not hrp.Parent then return end
@@ -55,7 +56,7 @@ local function hardLockTo(targetPos: Vector3, seconds: number)
     end)
 end
 
--- pós respawn: puxa de volta pra base
+-- pós respawn
 local function postSpawnPin(char)
     if not (state.autoRespawn and state.savedCFrame) then return end
     task.defer(function()
@@ -141,23 +142,26 @@ local function buildUI()
 
         local hrp = getHRP()
         local target = getGroundPosition(state.savedCFrame.Position)
+
         local conn
         conn = RunService.Heartbeat:Connect(function(dt)
             if not hrp or not hrp.Parent then conn:Disconnect(); state.isFlying=false; return end
 
             local dir = (target - hrp.Position)
             local dist = dir.Magnitude
+
             if dist < 2 then
                 conn:Disconnect()
-                state.isFlying=false
+                state.isFlying = false
                 status.Text = "✅ Chegou ao destino!"
-                hardLockTo(target,HOLD_SECONDS)
+                hardLockTo(target, HOLD_SECONDS)
                 return
             end
 
-            local desiredVel = dir.Unit * math.clamp(dist, ACCEL, MAX_SPEED)
-            -- suaviza aplicando aceleração
-            hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity:Lerp(desiredVel, 0.25)
+            -- velocidade desejada
+            local desiredVel = dir.Unit * math.min(MAX_SPEED, dist * 2)
+            -- suaviza aceleração
+            hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity:Lerp(desiredVel, ACCEL*dt)
             status.Text = string.format("Distância: %.1f", dist)
         end)
     end)
