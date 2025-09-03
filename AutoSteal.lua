@@ -1,9 +1,8 @@
--- FlyBase Stealth+++ UltraTurbo
--- • Velocidade altíssima, mas dividida em passos curtos (4 studs)
--- • MoveTo sempre → servidor reconhece
--- • Anti-reset ativo durante voo
+-- FlyBase Stealth+++ StableTurbo
+-- • Velocidade rápida mas estável (não volta pra trás)
+-- • MoveTo + Velocity balanceados
 -- • Minimizar/Maximizar funcional
--- • Só 1 Slot
+-- • Só 1 Slot extra
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -12,13 +11,13 @@ local StarterGui = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 
--- Config (UltraTurbo)
+-- Config (turbo estável)
 local HOLD_SECONDS   = 5
 local POST_SPAWN_PIN = 1.2
-local WAYPOINT_DIST  = 4     -- passos super curtos (anti-rollback)
-local MAX_SPEED      = 400   -- turbo máximo (bem alto)
-local MIN_SPEED      = 300   -- turbo mínimo
-local ACCEL_FACTOR   = 0.35  -- aceleração forte
+local WAYPOINT_DIST  = 12    -- passos equilibrados
+local MAX_SPEED      = 160   -- turbo estável
+local MIN_SPEED      = 100
+local ACCEL_FACTOR   = 0.22
 local OBST_UP_STEP   = 6
 
 -- Teclas
@@ -40,7 +39,7 @@ local state = getgenv().FlyBaseUltimate
 
 local function notify(msg)
     pcall(function()
-        StarterGui:SetCore("SendNotification",{Title="FlyBase UltraTurbo",Text=msg,Duration=2})
+        StarterGui:SetCore("SendNotification",{Title="FlyBase StableTurbo",Text=msg,Duration=2})
     end)
 end
 
@@ -87,7 +86,7 @@ local function disableAnti()
     if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Dead,true) end
 end
 
--- Fly UltraTurbo
+-- Fly (StableTurbo)
 local uiStatus
 local function flyToBase()
     if state.isFlying or not state.savedCFrame then notify("⚠️ Define a base primeiro"); return end
@@ -105,7 +104,7 @@ local function flyToBase()
         if not hrp.Parent then conn:Disconnect(); state.isFlying=false; disableAnti(); return end
 
         local dist=(wpTarget-hrp.Position).Magnitude
-        if dist<1.5 then
+        if dist<2 then
             iWp+=1
             if iWp>wpCount then
                 conn:Disconnect(); state.isFlying=false
@@ -115,6 +114,7 @@ local function flyToBase()
             hum:MoveTo(wpTarget)
         end
 
+        -- velocidade balanceada
         local dir=(wpTarget-hrp.Position)
         if dir.Magnitude>1 then
             dir=dir.Unit
@@ -126,7 +126,7 @@ local function flyToBase()
     end)
 end
 
--- UI
+-- UI (igual antes, com minimizar)
 local function buildUI()
     if state.uiBuilt then return end
     state.uiBuilt=true
@@ -153,7 +153,7 @@ local function buildUI()
     titleBar.Size=UDim2.fromOffset(280,26); titleBar.BackgroundTransparency=1; titleBar.Parent=frame
     local title=Instance.new("TextLabel")
     title.Size=UDim2.fromScale(0.8,1); title.BackgroundTransparency=1
-    title.Text="🚀 FlyBase UltraTurbo"
+    title.Text="🚀 FlyBase StableTurbo"
     title.Font=Enum.Font.GothamBlack; title.TextSize=18; title.TextColor3=Color3.fromRGB(255,255,255)
     title.Parent=titleBar
     local minBtn=Instance.new("TextButton")
@@ -219,4 +219,4 @@ local function buildUI()
 end
 
 buildUI()
-notify("FlyBase UltraTurbo carregado — velocidade máxima sem rollback e UI com minimizar")
+notify("FlyBase StableTurbo carregado — rápido e estável, sem rollback")
