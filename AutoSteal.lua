@@ -1,7 +1,7 @@
--- FlyBase Stealth+++ (UI simplificada)
--- • Só 1 slot extra (Slot 1)
--- • Botão minimizar/maximizar a UI
--- • Mantém voo Stealth replicado (waypoints + velocity) + anti-reset
+-- FlyBase Stealth+++ (corrigido)
+-- • Só 1 slot extra (Slot 1) — removidos Slot 2 e 3
+-- • Botão Minimizar/Maximizar na barra de título
+-- • Voo Stealth replicado (waypoints + velocity), anti-reset ativo
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -67,34 +67,24 @@ local function hardLockTo(target,seconds)
     end)
 end
 
-local function forwardObstacle(hrp)
-    local rp=RaycastParams.new()
-    rp.FilterDescendantsInstances={player.Character}
-    rp.FilterType=Enum.RaycastFilterType.Blacklist
-    local origin=hrp.Position+Vector3.new(0,2,0)
-    return Workspace:Raycast(origin,hrp.CFrame.LookVector*OBST_CHECK_DIST,rp)~=nil
-end
-
 -- Anti-reset
 local Anti={active=false}
 local function hookReset() pcall(function()
     StarterGui:SetCore("ResetButtonCallback",function() notify("⛔ Reset bloqueado em voo") return end)
 end) end
 local function unhookReset() pcall(function() StarterGui:SetCore("ResetButtonCallback",true) end) end
-local function setDrop(lock)
-    local bp=player:FindFirstChildOfClass("Backpack")
-    if bp then for _,o in ipairs(bp:GetChildren()) do if o:IsA("Tool") then o.CanBeDropped=not lock end end end
-end
 local function enableAnti()
     if Anti.active then return end
     Anti.active=true
-    hookReset(); setDrop(true)
-    local hum=getHumanoid(); hum.BreakJointsOnDeath=false; hum:SetStateEnabled(Enum.HumanoidStateType.Dead,false)
+    hookReset()
+    local hum=getHumanoid()
+    hum.BreakJointsOnDeath=false
+    hum:SetStateEnabled(Enum.HumanoidStateType.Dead,false)
 end
 local function disableAnti()
     if not Anti.active then return end
     Anti.active=false
-    unhookReset(); setDrop(false)
+    unhookReset()
     local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
     if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Dead,true) end
 end
@@ -113,7 +103,6 @@ local function flyToBase()
     hum:MoveTo(wpTarget)
     local conn; conn=RunService.Heartbeat:Connect(function(dt)
         if not hrp.Parent then conn:Disconnect(); state.isFlying=false; disableAnti(); return end
-        if forwardObstacle(hrp) then wpTarget=wpTarget+Vector3.new(0,OBST_UP_STEP,0); hum:MoveTo(wpTarget) end
         local dist=(wpTarget-hrp.Position).Magnitude
         if dist<3 then
             iWp+=1
@@ -126,17 +115,7 @@ local function flyToBase()
         local spd=MIN_SPEED+(MAX_SPEED-MIN_SPEED)*math.random()
         local vel=dir*spd
         hrp.AssemblyLinearVelocity=hrp.AssemblyLinearVelocity:Lerp(vel,ACCEL_FACTOR)
-        if uiStatus then uiStatus.Text=string.format("Dist: %.1f", (target-hrp.Position).Magnitude) end
-    end)
-end
-
--- Respawn
-local function postSpawnPin(char)
-    if not(state.autoRespawn and state.savedCFrame) then return end
-    task.defer(function()
-        local hrp=char:WaitForChild("HumanoidRootPart")
-        local g=groundAt(state.savedCFrame.Position)
-        hrp.CFrame=CFrame.new(g); hardLockTo(g,POST_SPAWN_PIN)
+        if uiStatus then uiStatus.Text=string.format("Dist: %.1f",(target-hrp.Position).Magnitude) end
     end)
 end
 
@@ -158,10 +137,11 @@ local function buildUI()
 
     local stroke=Instance.new("UIStroke"); stroke.Thickness=2; stroke.Color=Color3.fromRGB(120,140,255); stroke.Parent=frame
 
-    local layout=Instance.new("UIListLayout"); layout.Padding=UDim.new(0,10); layout.HorizontalAlignment=Enum.HorizontalAlignment.Center
+    local layout=Instance.new("UIListLayout"); layout.Padding=UDim.new(0,10)
+    layout.HorizontalAlignment=Enum.HorizontalAlignment.Center
     layout.VerticalAlignment=Enum.VerticalAlignment.Center; layout.Parent=frame
 
-    -- Título + botão minimizar
+    -- Título + Minimizar
     local titleBar=Instance.new("Frame")
     titleBar.Size=UDim2.fromOffset(280,26); titleBar.BackgroundTransparency=1; titleBar.Parent=frame
     local title=Instance.new("TextLabel")
@@ -176,21 +156,7 @@ local function buildUI()
     Instance.new("UICorner",minBtn).CornerRadius=UDim.new(0,6)
     minBtn.Parent=titleBar
 
-    -- Dragging
-    do local dragging=false; local dragStart; local startPos
-        titleBar.InputBegan:Connect(function(i)
-            if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true; dragStart=i.Position; startPos=frame.Position
-                i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then dragging=false end end)
-            end end)
-        UserInputService.InputChanged:Connect(function(i)
-            if dragging and i.UserInputType==Enum.UserInputType.MouseMovement then
-                local delta=i.Position-dragStart
-                frame.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+delta.X,startPos.Y.Scale,startPos.Y.Offset+delta.Y)
-                state.uiPos=frame.Position
-            end end)
-    end
-
-    -- Botões principais
+    -- Botões
     local function makeBtn(txt,color)
         local b=Instance.new("TextButton")
         b.Size=UDim2.fromOffset(240,44)
@@ -200,15 +166,16 @@ local function buildUI()
         b.Parent=frame; return b
     end
 
-    local flyBtn = makeBtn("✈️ Fly to Base  (F)", Color3.fromRGB(70,70,120))
+    local flyBtn = makeBtn("✈️ Fly to Base (F)", Color3.fromRGB(70,70,120))
     local setBtn = makeBtn("➕ Set Position (G)", Color3.fromRGB(70,120,70))
     local respBtn= makeBtn("🔄 Auto Respawn: ON (R)", Color3.fromRGB(120,90,70))
     local slot1  = makeBtn("🎯 Slot 1 (1) | SHIFT+1 salva", Color3.fromRGB(52,98,160))
 
     uiStatus=Instance.new("TextLabel")
     uiStatus.Size=UDim2.fromOffset(260,20); uiStatus.BackgroundTransparency=1
-    uiStatus.Text="Base salva: nenhuma"; uiStatus.Font=Enum.Font.Gotham; uiStatus.TextSize=14
-    uiStatus.TextColor3=Color3.fromRGB(200,220,255); uiStatus.Parent=frame
+    uiStatus.Text="Base salva: nenhuma"; uiStatus.Font=Enum.Font.Gotham
+    uiStatus.TextSize=14; uiStatus.TextColor3=Color3.fromRGB(200,220,255)
+    uiStatus.Parent=frame
 
     -- Ações
     setBtn.MouseButton1Click:Connect(function()
@@ -220,23 +187,14 @@ local function buildUI()
         respBtn.Text=state.autoRespawn and "🔄 Auto Respawn: ON (R)" or "🔄 Auto Respawn: OFF (R)"
     end)
     slot1.MouseButton1Click:Connect(function()
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift) then
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
             state.slot1=getHRP().CFrame; notify("💾 Slot 1 salvo.")
         else
             if state.slot1 then state.savedCFrame=state.slot1; notify("🎯 Slot 1 ativado.") else notify("⚠️ Slot 1 vazio.") end
         end
     end)
 
-    -- Atalhos
-    UserInputService.InputBegan:Connect(function(i,gp)
-        if gp then return end
-        if i.KeyCode==KEY_FLY then flyBtn:Activate()
-        elseif i.KeyCode==KEY_SET then setBtn:Activate()
-        elseif i.KeyCode==KEY_TOGGLE_RESP then respBtn:Activate()
-        elseif i.KeyCode==KEY_SLOT_1 then slot1:Activate() end
-    end)
-
-    -- Minimizar
+    -- Minimizar/Maximizar
     local minimized=false
     minBtn.MouseButton1Click:Connect(function()
         minimized=not minimized
@@ -245,15 +203,7 @@ local function buildUI()
         end
         minBtn.Text=minimized and "+" or "—"
     end)
-
-    RunService.RenderStepped:Connect(function()
-        local t=tick(); stroke.Color=Color3.fromHSV((t%6)/6,0.6,1)
-    end)
-
-    player.CharacterAdded:Connect(function(char)
-        gui.Parent=player:WaitForChild("PlayerGui"); if state.autoRespawn then postSpawnPin(char) end
-    end)
 end
 
 buildUI()
-notify("FlyBase Stealth+++ carregado — Set (G), Fly (F), Slot1 (1), minimizar no canto")
+notify("FlyBase Stealth+++ carregado — agora só Slot 1 e botão de minimizar na barra de título")
