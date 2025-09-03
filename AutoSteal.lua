@@ -1,5 +1,5 @@
 -- FlyBase Ultimate
--- Interface + Fly inteligente + Respawn opcional
+-- Interface + Fly inteligente + Respawn opcional + Reset Cinematic
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -15,8 +15,8 @@ getgenv().FlyBaseUltimate = getgenv().FlyBaseUltimate or {
 local state = getgenv().FlyBaseUltimate
 
 -- Funções utilitárias
-local function getHRP()
-    local char = player.Character or player.CharacterAdded:Wait()
+local function getHRP(char)
+    char = char or player.Character or player.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart")
 end
 
@@ -164,7 +164,7 @@ local function buildUI()
         stroke.Color = Color3.fromHSV((t%6)/6, 0.6, 1)
     end)
 
-    -- Respawn handler
+    -- Respawn handler (igual Cinematic, mas opcional)
     player.CharacterAdded:Connect(function(char)
         gui.Parent = player:WaitForChild("PlayerGui")
         if state.autoRespawn and state.savedCFrame then
