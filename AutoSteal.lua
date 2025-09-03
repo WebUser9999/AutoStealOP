@@ -1,5 +1,5 @@
 -- FlyBase Ultimate Stealth++
--- Movimento híbrido: WalkToPoint + Velocity, dividido em waypoints
+-- Movimento híbrido (Humanoid.MoveTo + Velocity), dividido em waypoints
 -- Anti-reset/morte/drop ativo durante o voo
 -- Smooth e replicado pro servidor (não é só client visual)
 
@@ -38,9 +38,7 @@ local function hookReset()
         return
     end)
 end
-local function unhookReset()
-    StarterGui:SetCore("ResetButtonCallback", true)
-end
+local function unhookReset() StarterGui:SetCore("ResetButtonCallback", true) end
 local function enableAnti()
     if Anti.active then return end
     Anti.active = true
@@ -48,7 +46,9 @@ local function enableAnti()
     local hum = getHumanoid()
     hum.BreakJointsOnDeath = false
     hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-    for _,tool in ipairs(player.Backpack:GetChildren()) do if tool:IsA("Tool") then tool.CanBeDropped=false end end
+    for _,tool in ipairs(player.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then tool.CanBeDropped=false end
+    end
 end
 local function disableAnti()
     if not Anti.active then return end
@@ -136,7 +136,7 @@ local function buildUI()
     gui.Parent=player:WaitForChild("PlayerGui")
 
     local frame=Instance.new("Frame")
-    frame.Size=UDim2.fromOffset(260,250)
+    frame.Size=UDim2.fromOffset(260,260)
     frame.Position=UDim2.fromScale(0.75,0.6)
     frame.BackgroundColor3=Color3.fromRGB(30,30,40)
     frame.Parent=gui
@@ -161,7 +161,7 @@ local function buildUI()
         b.BackgroundColor3=color
         Instance.new("UICorner",b)
         b.Parent=frame
-        b.MouseButton1Click:Connect(callback)
+        if callback then b.MouseButton1Click:Connect(callback) end
     end
 
     btn("➕ Set Position",Color3.fromRGB(70,120,70),function()
@@ -169,6 +169,10 @@ local function buildUI()
         notify("📍 Base salva ✔")
     end)
     btn("✈️ Fly to Base",Color3.fromRGB(70,70,120),flyToBase)
+    btn("🔄 Auto Respawn: ON",Color3.fromRGB(120,90,70),function(btn)
+        state.autoRespawn = not state.autoRespawn
+        btn.Text = state.autoRespawn and "🔄 Auto Respawn: ON" or "🔄 Auto Respawn: OFF"
+    end)
 end
 
 buildUI()
