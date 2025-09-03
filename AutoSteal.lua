@@ -1,25 +1,20 @@
--- FlyBase Overdrive
--- Sistema intenso com múltiplas bases, UI dinâmica e voo suave
+-- FlyBase Turbo
+-- UI com vários botões e funções avançadas
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 
--- ==============================
--- GLOBAL STATE (anti-reset total)
--- ==============================
-getgenv().FlyBaseOverdrive = getgenv().FlyBaseOverdrive or {
-    bases = {},          -- {["Casa"] = Vector3, ["Torre"] = Vector3}
+-- Estado global (anti-reset)
+getgenv().FlyBaseTurbo = getgenv().FlyBaseTurbo or {
+    bases = {},
     currentBase = nil,
     flying = false
 }
+local state = getgenv().FlyBaseTurbo
+local flyConn
 
-local state = getgenv().FlyBaseOverdrive
-
--- ==============================
--- UTIL
--- ==============================
+-- Funções utilitárias
 local function getHRP()
     local char = player.Character or player.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart"), char:WaitForChild("Humanoid")
@@ -28,124 +23,75 @@ end
 local function notify(msg)
     pcall(function()
         game.StarterGui:SetCore("SendNotification", {
-            Title = "FlyBase Overdrive",
+            Title = "FlyBase Turbo",
             Text = msg,
             Duration = 3
         })
     end)
 end
 
--- easing custom (ease in/out)
-local function easeInOut(t)
-    return 0.5 - 0.5 * math.cos(math.pi * t)
-end
-
--- ==============================
--- UI BASE
--- ==============================
+-- UI
 local gui = Instance.new("ScreenGui")
-gui.Name = "FlyBaseOverdriveUI"
+gui.Name = "FlyBaseTurboUI"
 gui.ResetOnSpawn = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.fromOffset(260, 300)
-frame.Position = UDim2.fromScale(0.02, 0.6)
+frame.Size = UDim2.fromOffset(240, 360)
+frame.Position = UDim2.fromScale(0.02, 0.5)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 frame.Parent = gui
+Instance.new("UICorner", frame)
 
-local corner = Instance.new("UICorner", frame)
-corner.CornerRadius = UDim.new(0, 12)
+local layout = Instance.new("UIListLayout", frame)
+layout.Padding = UDim.new(0, 6)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.VerticalAlignment = Enum.VerticalAlignment.Top
 
-local stroke = Instance.new("UIStroke", frame)
-stroke.Thickness = 2
-stroke.Color = Color3.fromRGB(90, 120, 255)
-
--- título
-local title = Instance.new("TextLabel", frame)
-title.Size = UDim2.new(1,0,0,30)
-title.BackgroundTransparency = 1
-title.Text = "🚀 FlyBase Overdrive"
-title.Font = Enum.Font.GothamBold
-title.TextSize = 16
-title.TextColor3 = Color3.fromRGB(255,255,255)
-
--- painel de status
-local status = Instance.new("TextLabel", frame)
-status.Size = UDim2.new(1,0,0,25)
-status.Position = UDim2.new(0,0,0,32)
-status.BackgroundTransparency = 1
-status.Text = "Base: (nenhuma) | Dist: -"
-status.Font = Enum.Font.Gotham
-status.TextSize = 14
-status.TextColor3 = Color3.fromRGB(200,220,255)
-
--- container scroll
-local scroll = Instance.new("ScrollingFrame", frame)
-scroll.Size = UDim2.new(1,0,1,-65)
-scroll.Position = UDim2.new(0,0,0,65)
-scroll.CanvasSize = UDim2.new(0,0,0,0)
-scroll.BackgroundTransparency = 1
-scroll.ScrollBarThickness = 6
-
-local listLayout = Instance.new("UIListLayout", scroll)
-listLayout.Padding = UDim.new(0,4)
-
--- botão util
-local function makeBtn(text, color)
+local function makeBtn(txt, color)
     local b = Instance.new("TextButton")
-    b.Size = UDim2.fromOffset(240,30)
-    b.Text = text
-    b.Font = Enum.Font.GothamSemibold
+    b.Size = UDim2.fromOffset(220, 36)
+    b.Text = txt
+    b.Font = Enum.Font.GothamBold
     b.TextSize = 14
     b.TextColor3 = Color3.new(1,1,1)
-    b.BackgroundColor3 = color or Color3.fromRGB(50,50,70)
+    b.BackgroundColor3 = color or Color3.fromRGB(50, 50, 70)
     Instance.new("UICorner", b)
+    b.Parent = frame
     return b
 end
 
--- ==============================
--- UI CONTROLS
--- ==============================
-local function refreshList()
-    scroll:ClearAllChildren()
-    local lay = Instance.new("UIListLayout", scroll)
-    lay.Padding = UDim.new(0,4)
+-- Criando botões
+local setBtn     = makeBtn("➕ Set Base", Color3.fromRGB(70,120,70))
+local switchBtn  = makeBtn("🔄 Switch Base", Color3.fromRGB(90,90,140))
+local flyBtn     = makeBtn("✈️ Fly to Base", Color3.fromRGB(70,70,120))
+local deleteBtn  = makeBtn("❌ Delete Base", Color3.fromRGB(140,70,70))
+local listBtn    = makeBtn("📜 List Bases", Color3.fromRGB(100,100,100))
+local cancelBtn  = makeBtn("⏹ Cancel Fly", Color3.fromRGB(160,90,50))
+local saveBtn    = makeBtn("💾 Save Session", Color3.fromRGB(90,140,90))
+local clearBtn   = makeBtn("♻️ Clear All", Color3.fromRGB(140,90,140))
 
-    for name,pos in pairs(state.bases) do
-        local b = makeBtn("📍 "..name)
-        b.Parent = scroll
-        b.MouseButton1Click:Connect(function()
-            state.currentBase = name
-            notify("Selecionou base: "..name)
-        end)
-    end
-
-    scroll.CanvasSize = UDim2.new(0,0,0,#state.bases*34)
-end
-
--- botões principais
-local saveBtn = makeBtn("➕ Salvar Base", Color3.fromRGB(70,120,70))
-saveBtn.Parent = frame
-saveBtn.Position = UDim2.new(0,10,1,-35)
-
-local flyBtn = makeBtn("✈️ Voar", Color3.fromRGB(70,70,120))
-flyBtn.Parent = frame
-flyBtn.Position = UDim2.new(0,10,1,-70)
-
-saveBtn.MouseButton1Click:Connect(function()
+-- Lógica dos botões
+setBtn.MouseButton1Click:Connect(function()
     local hrp = getHRP()
-    notify("Digite o nome da base no chat!")
-    -- input via chat
-    local conn
-    conn = player.Chatted:Connect(function(msg)
-        conn:Disconnect()
-        local name = msg
-        state.bases[name] = hrp.Position
-        state.currentBase = name
-        notify("Base salva: "..name)
-        refreshList()
-    end)
+    local name = "Base"..tostring(#state.bases+1)
+    state.bases[name] = hrp.Position
+    state.currentBase = name
+    notify("Base salva: "..name)
+end)
+
+switchBtn.MouseButton1Click:Connect(function()
+    local keys = {}
+    for k in pairs(state.bases) do table.insert(keys, k) end
+    table.sort(keys)
+    if #keys == 0 then
+        notify("Nenhuma base salva.")
+        return
+    end
+    local idx = table.find(keys, state.currentBase) or 0
+    idx = (idx % #keys) + 1
+    state.currentBase = keys[idx]
+    notify("Base atual: "..state.currentBase)
 end)
 
 flyBtn.MouseButton1Click:Connect(function()
@@ -154,35 +100,27 @@ flyBtn.MouseButton1Click:Connect(function()
         notify("Nenhuma base selecionada.")
         return
     end
-
     local hrp, hum = getHRP()
     local target = state.bases[state.currentBase]
-    state.flying = true
 
+    state.flying = true
     hum.PlatformStand = true
     local startPos = hrp.Position
-    local dist = (target - startPos).Magnitude
-    local duration = math.clamp(dist/70,0.5,5)
+    local dist = (target-startPos).Magnitude
+    local duration = math.clamp(dist/60, 0.5, 6)
 
     local startTime = tick()
-    local conn
-    conn = RunService.RenderStepped:Connect(function()
+    flyConn = RunService.RenderStepped:Connect(function()
         if not hrp or not hrp.Parent then
-            conn:Disconnect()
+            flyConn:Disconnect()
             state.flying = false
             return
         end
-        local elapsed = tick()-startTime
-        local alpha = math.clamp(elapsed/duration,0,1)
-        local eased = easeInOut(alpha)
-        local newPos = startPos:Lerp(target,eased)
+        local alpha = math.clamp((tick()-startTime)/duration,0,1)
+        local newPos = startPos:Lerp(target, alpha)
         hrp.CFrame = CFrame.new(newPos, target)
-
-        local remain = (target-hrp.Position).Magnitude
-        status.Text = "Base: "..state.currentBase.." | Dist: "..math.floor(remain)
-
         if alpha>=1 then
-            conn:Disconnect()
+            flyConn:Disconnect()
             hum.PlatformStand = false
             state.flying = false
             notify("Chegou em "..state.currentBase.."!")
@@ -190,17 +128,49 @@ flyBtn.MouseButton1Click:Connect(function()
     end)
 end)
 
--- animação borda
-RunService.RenderStepped:Connect(function()
-    stroke.Color = Color3.fromHSV((tick()%5)/5,0.6,1)
+deleteBtn.MouseButton1Click:Connect(function()
+    if state.currentBase and state.bases[state.currentBase] then
+        state.bases[state.currentBase] = nil
+        notify("Base deletada.")
+        state.currentBase = nil
+    else
+        notify("Nenhuma base para deletar.")
+    end
 end)
 
--- manter UI após reset
+listBtn.MouseButton1Click:Connect(function()
+    if next(state.bases) == nil then
+        notify("Nenhuma base salva.")
+        return
+    end
+    for name,pos in pairs(state.bases) do
+        print("📍 "..name.." -> "..tostring(pos))
+    end
+    notify("Bases listadas no Output/Chat.")
+end)
+
+cancelBtn.MouseButton1Click:Connect(function()
+    if flyConn then
+        flyConn:Disconnect()
+        state.flying = false
+        local _, hum = getHRP()
+        hum.PlatformStand = false
+        notify("Voo cancelado!")
+    end
+end)
+
+saveBtn.MouseButton1Click:Connect(function()
+    getgenv().FlyBaseTurbo = state
+    notify("Sessão salva no getgenv()")
+end)
+
+clearBtn.MouseButton1Click:Connect(function()
+    state.bases = {}
+    state.currentBase = nil
+    notify("Todas as bases foram limpas!")
+end)
+
+-- UI sobrevive ao reset
 player.CharacterAdded:Connect(function()
     gui.Parent = player:WaitForChild("PlayerGui")
-    notify("Respawn detectado - bases ainda salvas")
 end)
-
--- inicializar
-refreshList()
-
