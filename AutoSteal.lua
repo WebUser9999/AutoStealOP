@@ -1,9 +1,8 @@
--- FlyBase Ultimate
--- Interface + Fly com easing + Auto Respawn + Fixação 7s NO CHÃO + Pós-respawn pin reforçado
+-- FlyBase Ultimate (seu código) + AntiResetWhileFlying (hard)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
 local player = Players.LocalPlayer
 
@@ -26,47 +25,17 @@ local function getHumanoid(char) char = char or getChar(); return char:WaitForCh
 local function notify(msg) pcall(function() StarterGui:SetCore("SendNotification",{Title="FlyBase",Text=msg,Duration=2}) end) end
 local function easeInOut(t) return 0.5 - 0.5*math.cos(math.pi*t) end
 
--- ======================= AntiResetWhileFlying (simples e só durante o voo) =======================
+-- ======================= AntiResetWhileFlying (AGRESSIVO) =======================
 local HAND_PART_NAMES = {"RightHand","LeftHand"} -- R6: {"Right Arm","Left Arm"}
 local Anti = {
     active = false,
-    hbConn = nil,
+    hb = nil,
+    healthConn = nil,
     diedConn = nil,
-    resetHooked = false,
+    reapplyResetHook = nil,
+    lastMax = nil,
+    resetHooked = false
 }
-
-local function getHands(char)
-    local t = {}
-    for _,n in ipairs(HAND_PART_NAMES) do
-        local h = char:FindFirstChild(n)
-        if h and h:IsA("BasePart") then table.insert(t, h) end
-    end
-    return t
-end
-
-local function somethingInHand(char)
-    -- Tool equipado?
-    for _,child in ipairs(char:GetChildren()) do
-        if child:IsA("Tool") then return true end
-    end
-    -- Qualquer solda/peça presa na mão que NÃO seja do próprio char
-    for _,hand in ipairs(getHands(char)) do
-        for _,d in ipairs(hand:GetDescendants()) do
-            if d:IsA("Weld") or d:IsA("WeldConstraint") or d:IsA("Motor6D") then
-                local other = nil
-                if d:IsA("WeldConstraint") then
-                    other = (d.Part0 == hand) and d.Part1 or ((d.Part1 == hand) and d.Part0 or nil)
-                else
-                    other = (d.Part0 == hand) and d.Part1 or ((d.Part1 == hand) and d.Part0 or nil)
-                end
-                if other and other:IsA("BasePart") and not other:IsDescendantOf(char) then
-                    return true
-                end
-            end
-        end
-    end
-    return false
-end
 
 local function hookResetButton()
     if Anti.resetHooked then return end
@@ -74,7 +43,7 @@ local function hookResetButton()
     pcall(function()
         StarterGui:SetCore("ResetButtonCallback", function()
             notify("⛔ Reset bloqueado enquanto estiver voando")
-            return -- ignora o reset
+            return -- ignora reset
         end)
     end)
 end
@@ -83,70 +52,122 @@ local function unhookResetButton()
     if not Anti.resetHooked then return end
     Anti.resetHooked = false
     pcall(function()
-        StarterGui:SetCore("ResetButtonCallback", true) -- restaura comportamento padrão
+        StarterGui:SetCore("ResetButtonCallback", true)
     end)
+end
+
+local function setToolsDrop(lock)
+    -- não recria nada; só impede drop/acidentes enquanto voa
+    local char = player.Character
+    if not char then return end
+    for _,obj in ipairs(char:GetChildren()) do
+        if obj:IsA("Tool") then
+            pcall(function() obj.CanBeDropped = not lock and true or false end)
+        end
+    end
+    local bp = player:FindFirstChildOfClass("Backpack")
+    if bp then
+        for _,obj in ipairs(bp:GetChildren()) do
+            if obj:IsA("Tool") then
+                pcall(function() obj.CanBeDropped = not lock and true or false end)
+            end
+        end
+    end
 end
 
 local function enableAntiReset()
     if Anti.active then return end
     Anti.active = true
+
     hookResetButton()
+    -- alguns jogos tentam reativar o reset; re-aplica a cada 0.5s
+    Anti.reapplyResetHook = RunService.Heartbeat:Connect(function()
+        if not state.isFlying then return end
+        hookResetButton()
+    end)
 
     local hum = getHumanoid()
     hum.BreakJointsOnDeath = false
-    -- “Deus” temporário só enquanto voa (não deixa zerar saúde)
-    local targetMax = math.max(hum.MaxHealth, 1e9)
-    hum.MaxHealth = targetMax
-    hum.Health = targetMax
+    hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+    hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+    hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
 
-    -- mantém health alto durante o voo
-    Anti.hbConn = RunService.Heartbeat:Connect(function()
+    -- vida "infinita" durante o voo
+    Anti.lastMax = hum.MaxHealth
+    local big = 1e9
+    hum.MaxHealth = math.max(big, hum.MaxHealth)
+    hum.Health = hum.MaxHealth
+
+    -- mantém vida alta continuamente
+    Anti.hb = RunService.Heartbeat:Connect(function()
         if not state.isFlying then return end
-        if hum.Health < targetMax * 0.99 then
-            hum.Health = targetMax
+        if hum.Health < hum.MaxHealth * 0.99 then
+            hum.Health = hum.MaxHealth
         end
-        -- evita cair em Dead
-        hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
     end)
 
-    -- se mesmo assim entrar em Died (kill function), cancela e revive instant
+    -- se algum script zerar a vida, volta
+    Anti.healthConn = hum:GetPropertyChangedSignal("Health"):Connect(function()
+        if state.isFlying and hum.Health < hum.MaxHealth * 0.99 then
+            hum.Health = hum.MaxHealth
+        end
+    end)
+
+    -- se ainda assim entrar em Died, tenta “desmorrer” rápido
     Anti.diedConn = hum.Died:Connect(function()
         if state.isFlying then
-            task.spawn(function()
-                -- revive na marra
-                player:LoadCharacter() -- evita tela de morte
+            task.defer(function()
+                -- força um "revive" local (melhor que LoadCharacter pra não perder nada)
+                local hrp = getHRP()
+                if hrp and hrp.Parent then
+                    hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                    hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+                    hum.Health = hum.MaxHealth
+                end
             end)
         end
     end)
 
-    notify("🛡️ Anti-reset ON (voando com item na mão)")
+    -- evita drop involuntário
+    setToolsDrop(true)
+    notify("🛡️ Anti-reset (voo) ON")
 end
 
 local function disableAntiReset()
     if not Anti.active then return end
     Anti.active = false
 
-    if Anti.hbConn then Anti.hbConn:Disconnect(); Anti.hbConn = nil end
+    if Anti.hb then Anti.hb:Disconnect(); Anti.hb = nil end
+    if Anti.healthConn then Anti.healthConn:Disconnect(); Anti.healthConn = nil end
     if Anti.diedConn then Anti.diedConn:Disconnect(); Anti.diedConn = nil end
+    if Anti.reapplyResetHook then Anti.reapplyResetHook:Disconnect(); Anti.reapplyResetHook = nil end
 
-    -- restaura reset e estados
     unhookResetButton()
+
+    -- restaura drop
+    setToolsDrop(false)
+
+    -- reabilita estados; mantém MaxHealth grandão pra evitar conflito? vamos restaurar:
     local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
     if hum then
         hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
-        -- não tento restaurar MaxHealth original pra evitar conflitos com jogos que mexem nisso.
-        -- quem quiser pode setar manual depois.
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+        if Anti.lastMax and Anti.lastMax >= 0 then
+            pcall(function() hum.MaxHealth = Anti.lastMax end)
+            if hum.Health > hum.MaxHealth then hum.Health = hum.MaxHealth end
+        end
     end
-    notify("✅ Anti-reset OFF")
+
+    notify("✅ Anti-reset (voo) OFF")
 end
 
--- pega posição no chão abaixo do ponto alvo
+-- ======================= (seu) helpers de chão/lock =======================
 local function getGroundPosition(pos: Vector3)
     local rayParams = RaycastParams.new()
     rayParams.FilterDescendantsInstances = {player.Character}
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-
-    local result = Workspace:Raycast(pos + Vector3.new(0,10,0), Vector3.new(0,-1000,0), rayParams)
+    local result = workspace:Raycast(pos + Vector3.new(0,10,0), Vector3.new(0,-1000,0), rayParams)
     if result then
         return Vector3.new(pos.X, result.Position.Y + 2, pos.Z)
     else
@@ -154,32 +175,22 @@ local function getGroundPosition(pos: Vector3)
     end
 end
 
--- lock pós-voo
 local function hardLockTo(targetPos: Vector3, seconds: number)
     local hrp = getHRP()
     if not hrp or not hrp.Parent then return end
-
-    -- ajusta para o chão
     local groundPos = getGroundPosition(targetPos)
-
     local t0 = tick()
     local conn
     conn = RunService.Heartbeat:Connect(function()
         if not hrp or not hrp.Parent then if conn then conn:Disconnect() end return end
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
-        if (hrp.Position - groundPos).Magnitude > DRIFT_EPS then
-            local look = hrp.CFrame - hrp.Position
-            hrp.CFrame = CFrame.new(groundPos) * (look - look.Position)
-        else
-            local look = hrp.CFrame - hrp.Position
-            hrp.CFrame = CFrame.new(groundPos) * (look - look.Position)
-        end
+        local look = hrp.CFrame - hrp.Position
+        hrp.CFrame = CFrame.new(groundPos) * (look - look.Position)
         if tick() - t0 >= seconds then if conn then conn:Disconnect() end end
     end)
 end
 
--- pós respawn
 local function postSpawnPin(char)
     if not (state.autoRespawn and state.savedCFrame) then return end
     task.defer(function()
@@ -202,7 +213,7 @@ local function postSpawnPin(char)
     end)
 end
 
--- UI (mantida)
+-- ======================= UI (seu código) =======================
 local function buildUI()
     if state.uiBuilt then return end
     state.uiBuilt = true
@@ -273,11 +284,8 @@ local function buildUI()
     flyBtn.MouseButton1Click:Connect(function()
         if state.isFlying or not state.savedCFrame then return end
 
-        -- >>> ANTI-RESET: só liga se estiver com algo na mão
-        local char = getChar()
-        if somethingInHand(char) then
-            enableAntiReset()
-        end
+        -- LIGA Anti-reset só durante o voo
+        enableAntiReset()
 
         state.isFlying = true
         local hrp = getHRP()
@@ -288,7 +296,9 @@ local function buildUI()
         local startTime = tick()
         local conn
         conn = RunService.RenderStepped:Connect(function()
-            if not hrp or not hrp.Parent then conn:Disconnect(); state.isFlying=false; disableAntiReset(); return end
+            if not hrp or not hrp.Parent then
+                conn:Disconnect(); state.isFlying=false; disableAntiReset(); return
+            end
             local elapsed = tick()-startTime
             local alpha = math.clamp(elapsed/duration,0,1)
             local eased = easeInOut(alpha)
@@ -303,7 +313,6 @@ local function buildUI()
             if alpha>=1 then
                 conn:Disconnect(); state.isFlying=false; status.Text="✅ Chegou ao destino!"
                 hardLockTo(target,HOLD_SECONDS)
-                -- dá o lock no chão e depois solta o anti-reset
                 task.delay(HOLD_SECONDS, function()
                     disableAntiReset()
                 end)
@@ -324,7 +333,7 @@ local function buildUI()
     player.CharacterAdded:Connect(function(char)
         gui.Parent = player:WaitForChild("PlayerGui")
         postSpawnPin(char)
-        -- no respawn, garante que o reset volte ao padrão se não estiver voando
+        -- se respawnou enquanto voava (edge), tenta desligar proteção pra evitar bug visual
         task.delay(0.2, function()
             if not state.isFlying then disableAntiReset() end
         end)
