@@ -1,8 +1,9 @@
--- FlyBase Stealth+++ TurboFix
--- • Velocidade rápida mas sem rollback (waypoints curtos + MoveTo)
--- • Minimizar/Maximizar funcional
--- • Só 1 slot extra
+-- FlyBase Stealth+++ UltraTurbo
+-- • Velocidade altíssima, mas dividida em passos curtos (4 studs)
+-- • MoveTo sempre → servidor reconhece
 -- • Anti-reset ativo durante voo
+-- • Minimizar/Maximizar funcional
+-- • Só 1 Slot
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -11,13 +12,13 @@ local StarterGui = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 
--- Config
+-- Config (UltraTurbo)
 local HOLD_SECONDS   = 5
 local POST_SPAWN_PIN = 1.2
-local WAYPOINT_DIST  = 8     -- passos curtos (anti-rollback)
-local MAX_SPEED      = 180   -- turbo máximo
-local MIN_SPEED      = 100   -- turbo mínimo
-local ACCEL_FACTOR   = 0.28  -- suavização
+local WAYPOINT_DIST  = 4     -- passos super curtos (anti-rollback)
+local MAX_SPEED      = 400   -- turbo máximo (bem alto)
+local MIN_SPEED      = 300   -- turbo mínimo
+local ACCEL_FACTOR   = 0.35  -- aceleração forte
 local OBST_UP_STEP   = 6
 
 -- Teclas
@@ -26,7 +27,7 @@ local KEY_SET        = Enum.KeyCode.G
 local KEY_TOGGLE_RESP= Enum.KeyCode.R
 local KEY_SLOT_1     = Enum.KeyCode.One
 
--- Estado global
+-- Estado
 getgenv().FlyBaseUltimate = getgenv().FlyBaseUltimate or {
     savedCFrame = nil,
     slot1 = nil,
@@ -39,7 +40,7 @@ local state = getgenv().FlyBaseUltimate
 
 local function notify(msg)
     pcall(function()
-        StarterGui:SetCore("SendNotification",{Title="FlyBase+++",Text=msg,Duration=2})
+        StarterGui:SetCore("SendNotification",{Title="FlyBase UltraTurbo",Text=msg,Duration=2})
     end)
 end
 
@@ -86,7 +87,7 @@ local function disableAnti()
     if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Dead,true) end
 end
 
--- Fly (TurboFix)
+-- Fly UltraTurbo
 local uiStatus
 local function flyToBase()
     if state.isFlying or not state.savedCFrame then notify("⚠️ Define a base primeiro"); return end
@@ -104,7 +105,7 @@ local function flyToBase()
         if not hrp.Parent then conn:Disconnect(); state.isFlying=false; disableAnti(); return end
 
         local dist=(wpTarget-hrp.Position).Magnitude
-        if dist<2 then
+        if dist<1.5 then
             iWp+=1
             if iWp>wpCount then
                 conn:Disconnect(); state.isFlying=false
@@ -122,16 +123,6 @@ local function flyToBase()
         end
 
         if uiStatus then uiStatus.Text=string.format("Dist: %.1f",(target-hrp.Position).Magnitude) end
-    end)
-end
-
--- Respawn
-local function postSpawnPin(char)
-    if not(state.autoRespawn and state.savedCFrame) then return end
-    task.defer(function()
-        local hrp=char:WaitForChild("HumanoidRootPart")
-        local g=groundAt(state.savedCFrame.Position)
-        hrp.CFrame=CFrame.new(g); hardLockTo(g,POST_SPAWN_PIN)
     end)
 end
 
@@ -162,7 +153,7 @@ local function buildUI()
     titleBar.Size=UDim2.fromOffset(280,26); titleBar.BackgroundTransparency=1; titleBar.Parent=frame
     local title=Instance.new("TextLabel")
     title.Size=UDim2.fromScale(0.8,1); title.BackgroundTransparency=1
-    title.Text="🚀 FlyBase Stealth+++ TurboFix"
+    title.Text="🚀 FlyBase UltraTurbo"
     title.Font=Enum.Font.GothamBlack; title.TextSize=18; title.TextColor3=Color3.fromRGB(255,255,255)
     title.Parent=titleBar
     local minBtn=Instance.new("TextButton")
@@ -228,4 +219,4 @@ local function buildUI()
 end
 
 buildUI()
-notify("FlyBase Stealth+++ TurboFix carregado — rápido, anti-voltar e minimizar funcionando")
+notify("FlyBase UltraTurbo carregado — velocidade máxima sem rollback e UI com minimizar")
