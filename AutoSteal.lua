@@ -1,7 +1,6 @@
--- FlyBase Stealth+++ (versão otimizada)
--- • Mais rápido (ajustei MIN_SPEED e MAX_SPEED, mantendo suavização)
--- • Minimizar/Maximizar 100% funcional
--- • Ao minimizar: mostra só barra com título e botão "Maximizar +"
+-- FlyBase Stealth+++ Turbo
+-- • Velocidade aumentada (mais rápido, mas suave p/ não resetar)
+-- • Minimizar/Maximizar 100% funcional (botão troca texto corretamente)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,16 +9,17 @@ local StarterGui = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 
--- Config
+-- Config (turbo speed)
 local HOLD_SECONDS   = 5
 local POST_SPAWN_PIN = 1.2
-local WAYPOINT_DIST  = 16
-local MAX_SPEED      = 120  -- velocidade máx (↑ mais rápido, mas natural)
-local MIN_SPEED      = 60   -- velocidade mín (↑ mais rápido, mas natural)
-local ACCEL_FACTOR   = 0.20 -- suavização
+local WAYPOINT_DIST  = 14
+local MAX_SPEED      = 220   -- muito mais rápido
+local MIN_SPEED      = 120   -- aceleração mínima
+local ACCEL_FACTOR   = 0.25  -- suavização de velocidade
 local OBST_CHECK_DIST= 8
 local OBST_UP_STEP   = 6
 
+-- Teclas
 local KEY_FLY        = Enum.KeyCode.F
 local KEY_SET        = Enum.KeyCode.G
 local KEY_TOGGLE_RESP= Enum.KeyCode.R
@@ -111,16 +111,6 @@ local function flyToBase()
         local spd=MIN_SPEED+(MAX_SPEED-MIN_SPEED)*math.random()
         hrp.AssemblyLinearVelocity=hrp.AssemblyLinearVelocity:Lerp(dir*spd,ACCEL_FACTOR)
         if uiStatus then uiStatus.Text=string.format("Dist: %.1f",(target-hrp.Position).Magnitude) end
-    end)
-end
-
--- Respawn
-local function postSpawnPin(char)
-    if not(state.autoRespawn and state.savedCFrame) then return end
-    task.defer(function()
-        local hrp=char:WaitForChild("HumanoidRootPart")
-        local g=groundAt(state.savedCFrame.Position)
-        hrp.CFrame=CFrame.new(g); hardLockTo(g,POST_SPAWN_PIN)
     end)
 end
 
@@ -217,4 +207,4 @@ local function buildUI()
 end
 
 buildUI()
-notify("FlyBase Stealth+++ carregado — mais rápido e com minimizar/maximizar funcional")
+notify("FlyBase Stealth+++ TURBO — mais rápido e minimizar/maximizar 100% funcional")
