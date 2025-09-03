@@ -1,25 +1,41 @@
--- FlyBase UI Simples e Estável
--- 2 botões: Set / Fly, sem mexer na câmera (sem tela preta)
+-- FlyBase Ultimate
+-- Interface + Fly inteligente + Respawn opcional
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
--- estado global
-getgenv().FlyBaseSafe = getgenv().FlyBaseSafe or {
+-- Estado global anti-reset
+getgenv().FlyBaseUltimate = getgenv().FlyBaseUltimate or {
     savedCFrame = nil,
     isFlying = false,
-    uiBuilt = false
+    uiBuilt = false,
+    autoRespawn = true
 }
-local state = getgenv().FlyBaseSafe
+local state = getgenv().FlyBaseUltimate
 
--- pegar HRP
+-- Funções utilitárias
 local function getHRP()
     local char = player.Character or player.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart")
 end
 
--- criar UI
+local function notify(msg)
+    pcall(function()
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "FlyBase",
+            Text = msg,
+            Duration = 2
+        })
+    end)
+end
+
+-- Easing para aceleração/desaceleração
+local function easeInOut(t)
+    return 0.5 - 0.5 * math.cos(math.pi * t)
+end
+
+-- Construção da UI
 local function buildUI()
     if state.uiBuilt then return end
     state.uiBuilt = true
@@ -30,21 +46,25 @@ local function buildUI()
     gui.Parent = player:WaitForChild("PlayerGui")
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.fromOffset(220, 160)
-    frame.Position = UDim2.fromScale(0.75, 0.65)
+    frame.Size = UDim2.fromOffset(260, 250)
+    frame.Position = UDim2.fromScale(0.75, 0.6)
     frame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
     frame.Parent = gui
     Instance.new("UICorner", frame)
 
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Thickness = 2
+    stroke.Color = Color3.fromRGB(120, 140, 255)
+
     local layout = Instance.new("UIListLayout", frame)
-    layout.Padding = UDim.new(0, 12)
+    layout.Padding = UDim.new(0, 10)
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout.VerticalAlignment = Enum.VerticalAlignment.Center
 
     local title = Instance.new("TextLabel")
     title.Size = UDim2.fromOffset(200, 30)
     title.BackgroundTransparency = 1
-    title.Text = "🚀 FlyBase"
+    title.Text = "🚀 FlyBase Ultimate"
     title.Font = Enum.Font.GothamBlack
     title.TextSize = 18
     title.TextColor3 = Color3.fromRGB(255,255,255)
@@ -52,11 +72,11 @@ local function buildUI()
 
     local function makeBtn(txt, baseColor, hoverColor)
         local b = Instance.new("TextButton")
-        b.Size = UDim2.fromOffset(180, 44)
+        b.Size = UDim2.fromOffset(200, 44)
         b.Text = txt
         b.Font = Enum.Font.GothamBold
         b.TextSize = 16
-        b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        b.TextColor3 = Color3.fromRGB(255,255,255)
         b.BackgroundColor3 = baseColor
         Instance.new("UICorner", b)
 
@@ -71,11 +91,14 @@ local function buildUI()
         return b
     end
 
+    -- Botões principais
     local setBtn = makeBtn("➕ Set Position", Color3.fromRGB(70,120,70), Color3.fromRGB(90,160,90))
     local flyBtn = makeBtn("✈️ Fly to Base", Color3.fromRGB(70,70,120), Color3.fromRGB(100,100,160))
+    local toggleBtn = makeBtn("🔄 Auto Respawn: ON", Color3.fromRGB(120,90,70), Color3.fromRGB(160,120,90))
 
+    -- HUD status
     local status = Instance.new("TextLabel")
-    status.Size = UDim2.fromOffset(200, 20)
+    status.Size = UDim2.fromOffset(220, 20)
     status.BackgroundTransparency = 1
     status.Text = "Base salva: nenhuma"
     status.Font = Enum.Font.Gotham
@@ -83,21 +106,25 @@ local function buildUI()
     status.TextColor3 = Color3.fromRGB(200,220,255)
     status.Parent = frame
 
-    -- salvar posição
+    -- Lógica Set
     setBtn.MouseButton1Click:Connect(function()
         local hrp = getHRP()
         state.savedCFrame = hrp.CFrame
-        status.Text = "📍 Base salva!"
+        status.Text = "📍 Base salva ✔"
     end)
 
-    -- voar até posição salva
+    -- Lógica Fly
     flyBtn.MouseButton1Click:Connect(function()
         if state.isFlying or not state.savedCFrame then return end
         state.isFlying = true
 
         local hrp = getHRP()
+        local startPos = hrp.Position
         local target = state.savedCFrame.Position
+        local distance = (startPos - target).Magnitude
+        local duration = math.clamp(distance/60, 1, 6)
 
+        local startTime = tick()
         local conn
         conn = RunService.RenderStepped:Connect(function()
             if not hrp or not hrp.Parent then
@@ -106,26 +133,49 @@ local function buildUI()
                 return
             end
 
-            local pos = hrp.Position
-            local dir = (target - pos)
-            local dist = dir.Magnitude
+            local elapsed = tick() - startTime
+            local alpha = math.clamp(elapsed/duration, 0, 1)
+            local eased = easeInOut(alpha)
 
-            if dist < 2 then
-                hrp.CFrame = CFrame.new(target)
+            local newPos = startPos:Lerp(target, eased)
+            hrp.CFrame = CFrame.new(newPos, target)
+
+            local remain = (target - newPos).Magnitude
+            local speed = (distance/duration) * math.sin(alpha*math.pi)
+            status.Text = string.format("Distância: %.1f | Vel: %.1f", remain, speed)
+
+            if alpha >= 1 then
                 conn:Disconnect()
                 state.isFlying = false
                 status.Text = "✅ Chegou ao destino!"
-            else
-                hrp.CFrame = CFrame.new(pos + dir.Unit * math.min(3, dist), target)
-                status.Text = string.format("Distância: %.1f", dist)
             end
         end)
     end)
 
-    -- reaplicar GUI após reset
-    player.CharacterAdded:Connect(function()
+    -- Toggle Auto Respawn
+    toggleBtn.MouseButton1Click:Connect(function()
+        state.autoRespawn = not state.autoRespawn
+        toggleBtn.Text = state.autoRespawn and "🔄 Auto Respawn: ON" or "🔄 Auto Respawn: OFF"
+    end)
+
+    -- Animação da borda
+    RunService.RenderStepped:Connect(function()
+        local t = tick()
+        stroke.Color = Color3.fromHSV((t%6)/6, 0.6, 1)
+    end)
+
+    -- Respawn handler
+    player.CharacterAdded:Connect(function(char)
         gui.Parent = player:WaitForChild("PlayerGui")
+        if state.autoRespawn and state.savedCFrame then
+            task.defer(function()
+                local hrp = char:WaitForChild("HumanoidRootPart")
+                hrp.CFrame = state.savedCFrame
+            end)
+        end
     end)
 end
 
+-- Iniciar
 buildUI()
+notify("FlyBase Ultimate carregado! ➕ Set / ✈️ Fly")
