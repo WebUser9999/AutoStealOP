@@ -1,21 +1,20 @@
--- WalkBase Stealth++ (simples)
--- • G = Set Positio
--- • F = Walk to Base
--- • Usa Pathfinding (seguro contra anticheat)
--- • Sem botões extras
+-- WalkBase Stealth++ (UI simples, só 2 botões)
+-- • Botões: Walk to Base / Set Position
+-- • Hotkeys: F = andar, G = salvar
+-- • Pathfinding seguro contra anticheat
 
 local Players = game:GetService("Players")
 local PathfindingService = game:GetService("PathfindingService")
-local UserInputService = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
 local player = Players.LocalPlayer
 
 -- Estado
-getgenv().WalkBaseSimple = getgenv().WalkBaseSimple or {
+getgenv().WalkBaseUI = getgenv().WalkBaseUI or {
     savedCFrame = nil,
-    isWalking = false
+    isWalking = false,
+    uiBuilt = false
 }
-local state = getgenv().WalkBaseSimple
+local state = getgenv().WalkBaseUI
 
 local function notify(msg)
     pcall(function()
@@ -36,14 +35,12 @@ local function walkToBase()
     local hrp=getHRP()
     local target=state.savedCFrame.Position
 
-    local path = PathfindingService:CreatePath({
-        AgentRadius = 2,
-        AgentHeight = 5,
-        AgentCanJump = true,
-        AgentJumpHeight = 7,
-        AgentMaxSlope = 45
+    local path=PathfindingService:CreatePath({
+        AgentRadius=2,AgentHeight=5,
+        AgentCanJump=true,AgentJumpHeight=7,
+        AgentMaxSlope=45
     })
-    path:ComputeAsync(hrp.Position, target)
+    path:ComputeAsync(hrp.Position,target)
 
     if path.Status ~= Enum.PathStatus.Complete then
         notify("⚠ Caminho inválido!")
@@ -51,8 +48,8 @@ local function walkToBase()
         return
     end
 
-    for _, waypoint in ipairs(path:GetWaypoints()) do
-        hum:MoveTo(waypoint.Position)
+    for _,wp in ipairs(path:GetWaypoints()) do
+        hum:MoveTo(wp.Position)
         hum.MoveToFinished:Wait()
         if not state.isWalking then return end
     end
@@ -61,15 +58,49 @@ local function walkToBase()
     state.isWalking=false
 end
 
--- Hotkeys
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.G then
-        state.savedCFrame = getHRP().CFrame
-        notify("📍 Base salva!")
-    elseif input.KeyCode == Enum.KeyCode.F then
-        walkToBase()
-    end
-end)
+-- Construir UI
+local function buildUI()
+    if state.uiBuilt then return end
+    state.uiBuilt=true
 
-notify("WalkBase carregado — G salva posição, F anda até a base 🚶")
+    local gui=Instance.new("ScreenGui")
+    gui.Name="WalkBaseUI"; gui.ResetOnSpawn=false
+    gui.Parent=player:WaitForChild("PlayerGui")
+
+    local frame=Instance.new("Frame")
+    frame.Size=UDim2.fromOffset(260,160)
+    frame.AnchorPoint=Vector2.new(0.5,0.5)
+    frame.Position=UDim2.fromScale(0.5,0.5)
+    frame.BackgroundColor3=Color3.fromRGB(26,28,36)
+    frame.Parent=gui
+    Instance.new("UICorner",frame).CornerRadius=UDim.new(0,12)
+
+    local layout=Instance.new("UIListLayout")
+    layout.Padding=UDim.new(0,10)
+    layout.HorizontalAlignment=Enum.HorizontalAlignment.Center
+    layout.VerticalAlignment=Enum.VerticalAlignment.Center
+    layout.Parent=frame
+
+    local function makeBtn(txt,color,callback)
+        local b=Instance.new("TextButton")
+        b.Size=UDim2.fromOffset(220,44)
+        b.Text=txt
+        b.Font=Enum.Font.GothamBold
+        b.TextSize=16
+        b.TextColor3=Color3.new(1,1,1)
+        b.BackgroundColor3=color
+        Instance.new("UICorner",b).CornerRadius=UDim.new(0,10)
+        b.Parent=frame
+        b.MouseButton1Click:Connect(callback)
+        return b
+    end
+
+    makeBtn("🚶 Walk to Base (F)", Color3.fromRGB(70,70,120), walkToBase)
+    makeBtn("📍 Set Position (G)", Color3.fromRGB(70,120,70), function()
+        state.savedCFrame=getHRP().CFrame
+        notify("📍 Base salva!")
+    end)
+end
+
+buildUI()
+notify("WalkBase Stealth++ carregado — UI com 2 botões (Walk / Set)")
