@@ -1,6 +1,8 @@
--- FlyBase Stealth+++ Turbo
--- • Velocidade aumentada (mais rápido, mas suave p/ não resetar)
--- • Minimizar/Maximizar 100% funcional (botão troca texto corretamente)
+-- FlyBase Stealth+++ TurboFix
+-- • Velocidade rápida mas sem rollback (waypoints curtos + MoveTo)
+-- • Minimizar/Maximizar funcional
+-- • Só 1 slot extra
+-- • Anti-reset ativo durante voo
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,14 +11,13 @@ local StarterGui = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 
--- Config (turbo speed)
+-- Config
 local HOLD_SECONDS   = 5
 local POST_SPAWN_PIN = 1.2
-local WAYPOINT_DIST  = 14
-local MAX_SPEED      = 220   -- muito mais rápido
-local MIN_SPEED      = 120   -- aceleração mínima
-local ACCEL_FACTOR   = 0.25  -- suavização de velocidade
-local OBST_CHECK_DIST= 8
+local WAYPOINT_DIST  = 8     -- passos curtos (anti-rollback)
+local MAX_SPEED      = 180   -- turbo máximo
+local MIN_SPEED      = 100   -- turbo mínimo
+local ACCEL_FACTOR   = 0.28  -- suavização
 local OBST_UP_STEP   = 6
 
 -- Teclas
@@ -25,7 +26,7 @@ local KEY_SET        = Enum.KeyCode.G
 local KEY_TOGGLE_RESP= Enum.KeyCode.R
 local KEY_SLOT_1     = Enum.KeyCode.One
 
--- Estado
+-- Estado global
 getgenv().FlyBaseUltimate = getgenv().FlyBaseUltimate or {
     savedCFrame = nil,
     slot1 = nil,
@@ -85,11 +86,12 @@ local function disableAnti()
     if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Dead,true) end
 end
 
--- Fly
+-- Fly (TurboFix)
 local uiStatus
 local function flyToBase()
     if state.isFlying or not state.savedCFrame then notify("⚠️ Define a base primeiro"); return end
     state.isFlying=true; enableAnti()
+
     local hrp=getHRP(); local hum=getHumanoid()
     local target=groundAt(state.savedCFrame.Position)
     local start=hrp.Position
@@ -97,20 +99,39 @@ local function flyToBase()
     local wpCount=math.max(1,math.ceil(total/WAYPOINT_DIST))
     local iWp=1; local wpTarget=start:Lerp(target,iWp/wpCount)
     hum:MoveTo(wpTarget)
-    local conn; conn=RunService.Heartbeat:Connect(function(dt)
+
+    local conn; conn=RunService.Heartbeat:Connect(function()
         if not hrp.Parent then conn:Disconnect(); state.isFlying=false; disableAnti(); return end
+
         local dist=(wpTarget-hrp.Position).Magnitude
-        if dist<3 then
+        if dist<2 then
             iWp+=1
-            if iWp>wpCount then conn:Disconnect(); state.isFlying=false
+            if iWp>wpCount then
+                conn:Disconnect(); state.isFlying=false
                 notify("✅ Chegou!"); hardLockTo(target,HOLD_SECONDS); disableAnti(); return
             end
-            wpTarget=start:Lerp(target,iWp/wpCount); hum:MoveTo(wpTarget)
+            wpTarget=start:Lerp(target,iWp/wpCount)
+            hum:MoveTo(wpTarget)
         end
-        local dir=(wpTarget-hrp.Position).Unit
-        local spd=MIN_SPEED+(MAX_SPEED-MIN_SPEED)*math.random()
-        hrp.AssemblyLinearVelocity=hrp.AssemblyLinearVelocity:Lerp(dir*spd,ACCEL_FACTOR)
+
+        local dir=(wpTarget-hrp.Position)
+        if dir.Magnitude>1 then
+            dir=dir.Unit
+            local spd=MIN_SPEED+(MAX_SPEED-MIN_SPEED)*math.random()
+            hrp.AssemblyLinearVelocity=hrp.AssemblyLinearVelocity:Lerp(dir*spd,ACCEL_FACTOR)
+        end
+
         if uiStatus then uiStatus.Text=string.format("Dist: %.1f",(target-hrp.Position).Magnitude) end
+    end)
+end
+
+-- Respawn
+local function postSpawnPin(char)
+    if not(state.autoRespawn and state.savedCFrame) then return end
+    task.defer(function()
+        local hrp=char:WaitForChild("HumanoidRootPart")
+        local g=groundAt(state.savedCFrame.Position)
+        hrp.CFrame=CFrame.new(g); hardLockTo(g,POST_SPAWN_PIN)
     end)
 end
 
@@ -141,7 +162,7 @@ local function buildUI()
     titleBar.Size=UDim2.fromOffset(280,26); titleBar.BackgroundTransparency=1; titleBar.Parent=frame
     local title=Instance.new("TextLabel")
     title.Size=UDim2.fromScale(0.8,1); title.BackgroundTransparency=1
-    title.Text="🚀 FlyBase Stealth+++"
+    title.Text="🚀 FlyBase Stealth+++ TurboFix"
     title.Font=Enum.Font.GothamBlack; title.TextSize=18; title.TextColor3=Color3.fromRGB(255,255,255)
     title.Parent=titleBar
     local minBtn=Instance.new("TextButton")
@@ -207,4 +228,4 @@ local function buildUI()
 end
 
 buildUI()
-notify("FlyBase Stealth+++ TURBO — mais rápido e minimizar/maximizar 100% funcional")
+notify("FlyBase Stealth+++ TurboFix carregado — rápido, anti-voltar e minimizar funcionando")
