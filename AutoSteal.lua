@@ -1,7 +1,7 @@
--- FlyBase Stealth+++ (corrigido)
+-- FlyBase Stealth+++ (corrigido final com boost)
 -- • Só 1 slot extra (Slot 1) — removidos Slot 2 e 3
 -- • Botão Minimizar/Maximizar na barra de título
--- • Voo Stealth replicado (waypoints + velocity), anti-reset ativo
+-- • Voo Stealth com aceleração progressiva, anti-reset ativo
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -12,13 +12,10 @@ local player = Players.LocalPlayer
 
 -- Config
 local HOLD_SECONDS   = 5
-local POST_SPAWN_PIN = 1.2
 local WAYPOINT_DIST  = 16
-local MAX_SPEED      = 70
-local MIN_SPEED      = 28
-local ACCEL_FACTOR   = 0.18
-local OBST_CHECK_DIST= 8
-local OBST_UP_STEP   = 6
+local MAX_SPEED      = 120  -- 🚀 mais rápido
+local MIN_SPEED      = 50   -- ⚡ velocidade mínima maior
+local ACCEL_FACTOR   = 0.25
 
 local KEY_FLY        = Enum.KeyCode.F
 local KEY_SET        = Enum.KeyCode.G
@@ -96,26 +93,20 @@ local function flyToBase()
     state.isFlying=true; enableAnti()
     local hrp=getHRP(); local hum=getHumanoid()
     local target=groundAt(state.savedCFrame.Position)
-    local start=hrp.Position
-    local total=(target-start).Magnitude
-    local wpCount=math.max(1,math.ceil(total/WAYPOINT_DIST))
-    local iWp=1; local wpTarget=start:Lerp(target,iWp/wpCount)
-    hum:MoveTo(wpTarget)
+
     local conn; conn=RunService.Heartbeat:Connect(function(dt)
         if not hrp.Parent then conn:Disconnect(); state.isFlying=false; disableAnti(); return end
-        local dist=(wpTarget-hrp.Position).Magnitude
+        local dist=(target-hrp.Position).Magnitude
         if dist<3 then
-            iWp+=1
-            if iWp>wpCount then conn:Disconnect(); state.isFlying=false
-                notify("✅ Chegou!"); hardLockTo(target,HOLD_SECONDS); disableAnti(); return
-            end
-            wpTarget=start:Lerp(target,iWp/wpCount); hum:MoveTo(wpTarget)
+            conn:Disconnect(); state.isFlying=false
+            notify("✅ Chegou!"); hardLockTo(target,HOLD_SECONDS); disableAnti(); return
         end
-        local dir=(wpTarget-hrp.Position).Unit
-        local spd=MIN_SPEED+(MAX_SPEED-MIN_SPEED)*math.random()
+        -- 🚀 Velocidade progressiva baseada na distância
+        local dir=(target-hrp.Position).Unit
+        local spd = math.clamp(MIN_SPEED + dist * 0.4, MIN_SPEED, MAX_SPEED)
         local vel=dir*spd
         hrp.AssemblyLinearVelocity=hrp.AssemblyLinearVelocity:Lerp(vel,ACCEL_FACTOR)
-        if uiStatus then uiStatus.Text=string.format("Dist: %.1f",(target-hrp.Position).Magnitude) end
+        if uiStatus then uiStatus.Text=string.format("Dist: %.1f | Vel: %.1f", dist, spd) end
     end)
 end
 
@@ -206,4 +197,4 @@ local function buildUI()
 end
 
 buildUI()
-notify("FlyBase Stealth+++ carregado — agora só Slot 1 e botão de minimizar na barra de título")
+notify("FlyBase Stealth+++ carregado — agora com aceleração progressiva e mais velocidade ⚡")
