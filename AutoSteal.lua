@@ -177,7 +177,7 @@ local function buildUI()
         stroke.Color = Color3.fromHSV((t%6)/6, 0.6, 1)
     end)
 
-    -- Respawn handler
+    -- Respawn handler (anti-reset)
     player.CharacterAdded:Connect(function(char)
         gui.Parent = player:WaitForChild("PlayerGui")
         if state.autoRespawn and state.savedCFrame then
