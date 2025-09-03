@@ -1,5 +1,5 @@
 -- WalkBase Stealth++ (simples)
--- • G = Set Position
+-- • G = Set Positio
 -- • F = Walk to Base
 -- • Usa Pathfinding (seguro contra anticheat)
 -- • Sem botões extras
