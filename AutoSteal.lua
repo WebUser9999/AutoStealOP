@@ -1,7 +1,7 @@
--- FlyBase Stealth+++ (corrigido final com boost)
--- • Só 1 slot extra (Slot 1) — removidos Slot 2 e 3
--- • Botão Minimizar/Maximizar na barra de título
--- • Voo Stealth com aceleração progressiva, anti-reset ativo
+-- WalkBase Stealth+++ (corrigido)
+-- • Anda até a base (sem voo)
+-- • Slot 1 + UI com minimizar/maximizar
+-- • Anti-reset ativo
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -11,31 +11,25 @@ local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 
 -- Config
-local HOLD_SECONDS   = 5
-local WAYPOINT_DIST  = 16
-local MAX_SPEED      = 120  -- 🚀 mais rápido
-local MIN_SPEED      = 50   -- ⚡ velocidade mínima maior
-local ACCEL_FACTOR   = 0.25
-
+local HOLD_SECONDS   = 3
+local MAX_SPEED      = 24  -- velocidade de andar (Humanoid.WalkSpeed padrão é 16)
 local KEY_FLY        = Enum.KeyCode.F
 local KEY_SET        = Enum.KeyCode.G
-local KEY_TOGGLE_RESP= Enum.KeyCode.R
 local KEY_SLOT_1     = Enum.KeyCode.One
 
 -- Estado global
-getgenv().FlyBaseUltimate = getgenv().FlyBaseUltimate or {
+getgenv().WalkBaseUltimate = getgenv().WalkBaseUltimate or {
     savedCFrame = nil,
     slot1 = nil,
-    isFlying = false,
+    isWalking = false,
     uiBuilt = false,
-    autoRespawn = true,
     uiPos = nil
 }
-local state = getgenv().FlyBaseUltimate
+local state = getgenv().WalkBaseUltimate
 
 local function notify(msg)
     pcall(function()
-        StarterGui:SetCore("SendNotification",{Title="FlyBase+++",Text=msg,Duration=2})
+        StarterGui:SetCore("SendNotification",{Title="WalkBase+++",Text=msg,Duration=2})
     end)
 end
 
@@ -52,22 +46,10 @@ local function groundAt(pos)
     return hit and Vector3.new(pos.X,hit.Position.Y+2,pos.Z) or pos
 end
 
-local function hardLockTo(target,seconds)
-    local hrp=getHRP(); if not hrp then return end
-    local g=groundAt(target)
-    local t0=tick()
-    local conn; conn=RunService.Heartbeat:Connect(function()
-        if not hrp.Parent then conn:Disconnect() return end
-        hrp.AssemblyLinearVelocity=Vector3.zero
-        hrp.CFrame=CFrame.new(g,g+hrp.CFrame.LookVector)
-        if tick()-t0>=seconds then conn:Disconnect() end
-    end)
-end
-
 -- Anti-reset
 local Anti={active=false}
 local function hookReset() pcall(function()
-    StarterGui:SetCore("ResetButtonCallback",function() notify("⛔ Reset bloqueado em voo") return end)
+    StarterGui:SetCore("ResetButtonCallback",function() notify("⛔ Reset bloqueado em movimento") return end)
 end) end
 local function unhookReset() pcall(function() StarterGui:SetCore("ResetButtonCallback",true) end) end
 local function enableAnti()
@@ -86,27 +68,28 @@ local function disableAnti()
     if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Dead,true) end
 end
 
--- Fly
+-- Walk
 local uiStatus
-local function flyToBase()
-    if state.isFlying or not state.savedCFrame then notify("⚠ Define a base primeiro"); return end
-    state.isFlying=true; enableAnti()
-    local hrp=getHRP(); local hum=getHumanoid()
+local function walkToBase()
+    if state.isWalking or not state.savedCFrame then notify("⚠ Define a base primeiro"); return end
+    state.isWalking=true; enableAnti()
+    local hum=getHumanoid(); local hrp=getHRP()
     local target=groundAt(state.savedCFrame.Position)
 
-    local conn; conn=RunService.Heartbeat:Connect(function(dt)
-        if not hrp.Parent then conn:Disconnect(); state.isFlying=false; disableAnti(); return end
-        local dist=(target-hrp.Position).Magnitude
-        if dist<3 then
-            conn:Disconnect(); state.isFlying=false
-            notify("✅ Chegou!"); hardLockTo(target,HOLD_SECONDS); disableAnti(); return
+    -- aumenta velocidade de andar
+    hum.WalkSpeed = MAX_SPEED
+    hum:MoveTo(target)
+
+    local conn; conn=hum.MoveToFinished:Connect(function(reached)
+        state.isWalking=false
+        disableAnti()
+        if reached then
+            notify("✅ Chegou andando até a base!")
+            uiStatus.Text="📍 Chegou ✔"
+        else
+            notify("⚠ Caminho interrompido.")
         end
-        -- 🚀 Velocidade progressiva baseada na distância
-        local dir=(target-hrp.Position).Unit
-        local spd = math.clamp(MIN_SPEED + dist * 0.4, MIN_SPEED, MAX_SPEED)
-        local vel=dir*spd
-        hrp.AssemblyLinearVelocity=hrp.AssemblyLinearVelocity:Lerp(vel,ACCEL_FACTOR)
-        if uiStatus then uiStatus.Text=string.format("Dist: %.1f | Vel: %.1f", dist, spd) end
+        conn:Disconnect()
     end)
 end
 
@@ -115,11 +98,11 @@ local function buildUI()
     if state.uiBuilt then return end
     state.uiBuilt=true
     local gui=Instance.new("ScreenGui")
-    gui.Name="FlyBaseUI"; gui.ResetOnSpawn=false; gui.IgnoreGuiInset=true
+    gui.Name="WalkBaseUI"; gui.ResetOnSpawn=false; gui.IgnoreGuiInset=true
     gui.Parent=player:WaitForChild("PlayerGui")
 
     local frame=Instance.new("Frame")
-    frame.Size=UDim2.fromOffset(300,280)
+    frame.Size=UDim2.fromOffset(300,260)
     frame.AnchorPoint=Vector2.new(0.5,0.5)
     frame.Position=state.uiPos or UDim2.fromScale(0.5,0.5)
     frame.BackgroundColor3=Color3.fromRGB(26,28,36)
@@ -137,7 +120,7 @@ local function buildUI()
     titleBar.Size=UDim2.fromOffset(280,26); titleBar.BackgroundTransparency=1; titleBar.Parent=frame
     local title=Instance.new("TextLabel")
     title.Size=UDim2.fromScale(0.8,1); title.BackgroundTransparency=1
-    title.Text="🚀 FlyBase Stealth+++"
+    title.Text="🚶 WalkBase Stealth+++"
     title.Font=Enum.Font.GothamBlack; title.TextSize=18; title.TextColor3=Color3.fromRGB(255,255,255)
     title.Parent=titleBar
     local minBtn=Instance.new("TextButton")
@@ -157,10 +140,9 @@ local function buildUI()
         b.Parent=frame; return b
     end
 
-    local flyBtn = makeBtn("✈ Fly to Base (F)", Color3.fromRGB(70,70,120))
-    local setBtn = makeBtn("➕ Set Position (G)", Color3.fromRGB(70,120,70))
-    local respBtn= makeBtn("🔄 Auto Respawn: ON (R)", Color3.fromRGB(120,90,70))
-    local slot1  = makeBtn("🎯 Slot 1 (1) | SHIFT+1 salva", Color3.fromRGB(52,98,160))
+    local walkBtn = makeBtn("🚶 Walk to Base (F)", Color3.fromRGB(70,70,120))
+    local setBtn  = makeBtn("➕ Set Position (G)", Color3.fromRGB(70,120,70))
+    local slot1   = makeBtn("🎯 Slot 1 (1) | SHIFT+1 salva", Color3.fromRGB(52,98,160))
 
     uiStatus=Instance.new("TextLabel")
     uiStatus.Size=UDim2.fromOffset(260,20); uiStatus.BackgroundTransparency=1
@@ -172,11 +154,7 @@ local function buildUI()
     setBtn.MouseButton1Click:Connect(function()
         state.savedCFrame=getHRP().CFrame; uiStatus.Text="📍 Base salva ✔"; notify("📍 Base salva ✔")
     end)
-    flyBtn.MouseButton1Click:Connect(flyToBase)
-    respBtn.MouseButton1Click:Connect(function()
-        state.autoRespawn=not state.autoRespawn
-        respBtn.Text=state.autoRespawn and "🔄 Auto Respawn: ON (R)" or "🔄 Auto Respawn: OFF (R)"
-    end)
+    walkBtn.MouseButton1Click:Connect(walkToBase)
     slot1.MouseButton1Click:Connect(function()
         if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
             state.slot1=getHRP().CFrame; notify("💾 Slot 1 salvo.")
@@ -197,4 +175,4 @@ local function buildUI()
 end
 
 buildUI()
-notify("FlyBase Stealth+++ carregado — agora com aceleração progressiva e mais velocidade ⚡")
+notify("WalkBase Stealth+++ carregado — agora anda até a base 🚶")
